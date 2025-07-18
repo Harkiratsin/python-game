@@ -142,25 +142,71 @@ def move_player(dx, dy):
             duration=PLAYER_MOVE_INTERVAL)
  #           on_finished=repeat_player_move)
 
-    player.pos = screen_coords(x, y)
+    player.pos = screen_coords(x, y) 
+
+import heapq
+
+def find_path(start, goal, map_):
+    width, height = GRID_WIDTH, GRID_HEIGHT
+    walls = set()
+    for y in range(height):
+        for x in range(width):
+            if map_[y][x] == "W":
+                walls.add((x, y))
+
+    def neighbors(pos):
+        x, y = pos
+        for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < width and 0 <= ny < height and (nx, ny) not in walls:
+                yield (nx, ny)
+
+    def heuristic(a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+    frontier = []
+    heapq.heappush(frontier, (0, start))
+    came_from = {start: None}
+    cost_so_far = {start: 0}
+
+    while frontier:
+        _, current = heapq.heappop(frontier)
+        if current == goal:
+            break
+        for next in neighbors(current):
+            new_cost = cost_so_far[current] + 1
+            if next not in cost_so_far or new_cost < cost_so_far[next]:
+                cost_so_far[next] = new_cost
+                priority = new_cost + heuristic(goal, next)
+                heapq.heappush(frontier, (priority, next))
+                came_from[next] = current
+
+    # Reconstruct path
+    path = []
+    cur = goal
+    while cur != start:
+        if cur not in came_from:
+            return []  # No path
+        path.append(cur)
+        cur = came_from[cur]
+    path.reverse()
+    return path
+       
 def move_guard(guard):
     global game_over
     if game_over:
         return
-    (player_x, player_y) = grid_coords(player)
-    (guard_x, guard_y) = grid_coords(guard)
-    if player_x > guard_x and MAP[guard_y][guard_x + 1] != "W":
-        guard_x += 1
-    elif player_x < guard_x and MAP[guard_y][guard_x - 1] != "W":
-        guard_x -= 1
-    elif player_y > guard_y and MAP[guard_y + 1][guard_x] != "W":
-        guard_y += 1
-    elif player_y < guard_y and MAP[guard_y - 1][guard_x] != "W":
-        guard_y -= 1
-    animate(guard, pos=screen_coords(guard_x, guard_y), \
-            duration=GUARD_MOVE_INTERVAL)
-    if guard_x == player_x and guard_y == player_y:
-        game_over = True
+
+    player_pos = grid_coords(player)
+    guard_pos = grid_coords(guard)
+    path = find_path(guard_pos, player_pos, MAP)
+
+    # Only move if a path exists and isn't already at the player
+    if path:
+        next_pos = path[0]
+        animate(guard, pos=screen_coords(*next_pos), duration=GUARD_MOVE_INTERVAL)
+        if next_pos == player_pos:
+            game_over = True
 def move_guards():
     for guard in guards:
         move_guard(guard)
